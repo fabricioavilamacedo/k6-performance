@@ -1,32 +1,58 @@
-import pesquisarUnidade     from "../requests/EOL/pesquisarUnidade.js"
-import pesquisarTurmaserie  from "../requests/EOL/pesquisarTurmaserie.js";
-import { group, sleep }     from 'k6'
-import { htmlReport }       from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js"
-
-export function handleSummary(data) {
-  return {
-    "summary.html": htmlReport(data),
-  };
-}
+import { group, sleep } from "k6"
+import { login } from "../services/authService.js"
+import { getProducts, createProduct } from "../services/productService.js"
+import { generateProduct } from "../data/products.js"
+import { THRESHOLDS } from "../config/config.js"
+import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js"
 
 export const options = {
-  insecureSkipTLSVerify: true,
-  vus:10,
-  duration: '10s',
-  threshoulds:{
-    http_req_duration: ['p(95)<2000'], //95% of requests must respond within 4 seconds
-    http_req_failed: ['rate<0.01'], //Only 1% of error requests should be accepted
-  }
+  vus: 5,
+  duration: "10s",
+  thresholds: THRESHOLDS
+};
+
+export function setup() {
+  const token = login()
+  return { token }
 }
 
-export default () => {
+export default function (data) {
 
-  group('Smoke Teste - Pesquisar Unidades', () => {
-    pesquisarUnidade();
-    pesquisarTurmaserie();
-  });  
+  const token = data.token
 
-  group('Smoke Teste - Pesquisar Turmas e serie', () => {
-    pesquisarTurmaserie();
-  });  
+  group("Get Products", () => {
+    getProducts(token)
+  });
+
+  group("Create Product", () => {
+    const product = generateProduct()
+    createProduct(token, product)
+  });
+
+  sleep(1)
+}
+
+//report
+export function handleSummary(data) {
+
+  const now = new Date();
+
+  const timestamp =
+    now.getFullYear() +
+    "-" +
+    String(now.getMonth() + 1).padStart(2, "0") +
+    "-" +
+    String(now.getDate()).padStart(2, "0") +
+    "_" +
+    String(now.getHours()).padStart(2, "0") +
+    "-" +
+    String(now.getMinutes()).padStart(2, "0") +
+    "-" +
+    String(now.getSeconds()).padStart(2, "0");
+
+  const fileName = `reports/smoke-${timestamp}.html`;
+
+  return {
+    [fileName]: htmlReport(data),
+  };
 }
